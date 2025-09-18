@@ -32,7 +32,9 @@ class customTokenRefreshView(TokenRefreshView):
         try:
             refresh_token = request.COOKIES.get("refresh_token")
             if not refresh_token:
-                return Response("No refresh token found in cookies.", {"detail": "refresh token was not found in the cookies."}, status.HTTP_401_UNAUTHORIZED)
+                return Response({
+                    "detail": "refresh token was not found in the cookies."
+                }, status=status.HTTP_401_UNAUTHORIZED)
 
             request._full_data = request.data.copy()
             request._full_data['refresh'] = refresh_token
@@ -41,7 +43,7 @@ class customTokenRefreshView(TokenRefreshView):
 
             access_token = response.data['access']
 
-            res = Response("Token has been refrshed", { "refreshed": True, "token": access_token })
+            res = Response({"message":"Token has been refrshed", "refreshed": True})
 
             res.set_cookie(
                 key="access_token",
@@ -66,7 +68,10 @@ class customTokenRefreshView(TokenRefreshView):
             return res
 
         except Exception as e:
-            return Response("An unexpected error occured", { "refreshed": False, "message":f"{e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "messag": f"An unexpected error occured {e}", 
+                "refreshed": False,
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
        
 
 
@@ -91,11 +96,20 @@ def login(request):
                 {"message": "Email is not associated with any user"},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+
+        try:
+            user_account = UserProfile.objects.get(user=user)
+        except UserProfile.DoesNotExist:
+            return Response({"message": "user does not have any account"},status=status.HTTP_404_NOT_FOUND)
+
+        if not user_account:
+            return Response({"message": "User does not have a user profile"}, status=status.HTTP_404_NOT_FOUND)
 
         if not check_password(password, user.password):
             return Response(
                 {"message": "Invalid credentials"},
-                status=status.HTTP_401_UNAUTHORIZED
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         auth_login(request, user)
@@ -103,16 +117,11 @@ def login(request):
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
 
-        response = Response(
-            {
+        response = Response({
                 "message": "Login successful",
                 "authenticated": True,
-                "access_token": access_token
-                    
-                
-            },
-            status=status.HTTP_200_OK
-        )
+                "access_token": access_token 
+            },status=status.HTTP_200_OK)
 
         cookie_settings = {
             "path": "/",
@@ -144,8 +153,7 @@ def register(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    first_name = serializer.validated_data["first_name"]
-    last_name = serializer.validated_data["last_name"]
+    full_name = serializer.validated_data["fullname"]
     username = serializer.validated_data["username"]
     user_type = serializer.validated_data["user_type"]
     email = serializer.validated_data["email"]
@@ -168,14 +176,14 @@ def register(request):
         user = User.objects.create_user(
             username=username,
             email=email,
-            first_name=first_name,
-            last_name=last_name,
+            first_name=full_name,
             password=password
         )
 
         UserProfile.objects.create(
             user=user,
-            user_type=user_type
+            user_type=user_type,
+            full_name=full_name
         )
         
 
@@ -305,6 +313,7 @@ def save_social_links(request):
         links.twitter = request.data.get("twitter", links.twitter)
         links.facebook = request.data.get("facebook", links.facebook)
         links.instagram = request.data.get("instagram", links.instagram)
+        links.youtube = request.data.get("youtube", links.youtube)
         links.personal_website = request.data.get("personal_website", links.personal_website)    
         links.save()
         return Response({"status": "success", "message": "Social links saved"}, status=status.HTTP_200_OK)

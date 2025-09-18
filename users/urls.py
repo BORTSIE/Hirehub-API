@@ -1,9 +1,10 @@
-from django.urls import path, include
+from django.urls import path
 from . import views
 
 urlpatterns = [
     path('login/',views.login), 
     path('register/',views.register),
+    path('refresh/', views.customTokenRefreshView.as_view()),
     # path('profile/',views.get_profile), 
     # path('resume/',views.get_resume),
     path('social-links/',views.get_socail_links),
