@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 import uuid
 
+# UserProfile Model
 class UserProfile(models.Model):
     class user_type(models.TextChoices):
         JOB_SEEKER = 'JS', 'Job Seeker'
@@ -24,6 +25,7 @@ class UserProfile(models.Model):
         return self.user.username
     
 
+# Resume Model
 class Resume(models.Model):
     user_profile = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='resume')
     resume_name = models.CharField(max_length=255)
@@ -34,6 +36,7 @@ class Resume(models.Model):
         return f"{self.user_profile.user.username}'s Resume"
     
 
+# SocialLink Model
 class SocialLink(models.Model):
     user_profile = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='social_links')
     linkedin = models.URLField(null=True, blank=True)
@@ -59,6 +62,7 @@ here to keep everything centralized and consistent.
 
 """
 
+# Salary Model
 class Salary(models.Model):
     min = models.PositiveIntegerField()
     max = models.PositiveIntegerField()
@@ -68,6 +72,7 @@ class Salary(models.Model):
 
 
 
+# Founding Info Model
 class FoundingInfo(models.Model):
     org_type = models.TextField(blank=True, null=True)
     industry_type = models.TextField(blank=True, null=True)

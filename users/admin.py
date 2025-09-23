@@ -9,7 +9,7 @@ class userprofile(admin.ModelAdmin):
     search_fields = ('user__username', 'user__email', 'location')
     list_filter = ('user_type', 'location')
 
-# Register your models here.
+
 @admin.register(Resume)
 class ResumeAdmin(admin.ModelAdmin):
     list_display = ('user_profile', 'resume_name')

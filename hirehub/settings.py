@@ -65,6 +65,8 @@ REST_FRAMEWORK = {
 }
 
 
+
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]
@@ -162,3 +164,13 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# ✅ Email settings (add here at the bottom)
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT =465
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = "citizenwan13@gmail.com"
+EMAIL_HOST_PASSWORD = "rgerkjwmvocqrmdx "  # from Google App Passwords
+DEFAULT_FROM_EMAIL = "HireHub <citizenwan13@gmail.com>"
