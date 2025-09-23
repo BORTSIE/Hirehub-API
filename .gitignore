@@ -1,1 +1,10 @@
-db.sqlite3
+__pycache__/
+.env/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+media/
+staticfiles/
+.DS_Store
+.vscode/db.sqlite3 
