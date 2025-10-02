@@ -1,9 +1,15 @@
-from rest_framework.authentication import TokenAuthentication
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 
 # Custom authentication to read token from cookies
-class CookieTokenAuthentication(TokenAuthentication):
+class CookieJWTAuthentication(JWTAuthentication):
     def authenticate(self, request):
-        token = request.COOKIES.get("access_token")        
-        if token is None:
+        raw_token = request.COOKIES.get("access_token")        
+        if raw_token is None:
             return None        
-        return self.authenticate_credentials(token)
+        try:
+            validated_token = self.get_validated_token(raw_token)
+            user = self.get_user(validated_token)
+        except Exception:
+            raise AuthenticationFailed("Invalid or expired token in cookie")       
+        return (user, validated_token)

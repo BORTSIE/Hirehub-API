@@ -13,7 +13,7 @@ def send_activation_email(user):
        
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
-        activation_link = f"http://localhost:5173/auth/activate?uid={uidb64}&token={token}/"   
+        activation_link = f"http://localhost:5173/auth/activate?uid={uidb64}&token={token}"   
 
         send_mail(
             subject="Activate your HireHub account",    

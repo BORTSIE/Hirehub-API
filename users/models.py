@@ -111,14 +111,16 @@ class Company(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     name = models.CharField(max_length=255)
     logo = models.ImageField(upload_to="logos/", blank=True, null=True)
-    banner_logo = models.ImageField(upload_to="banners/", blank=True, null=True)
+    banner_logo = models.ImageField(upload_to="banners/", blank=True,
+                                    null=True)
     about_us = models.TextField()
 
     founding_info = models.OneToOneField(
         FoundingInfo, on_delete=models.CASCADE, related_name="company"
     )
     socials = models.OneToOneField(
-        SocialLinks, on_delete=models.CASCADE, related_name="company", null=True, blank=True
+        SocialLinks, on_delete=models.CASCADE, related_name="company",
+        null=True, blank=True
     )
     contact_info = models.OneToOneField(
         ContactInfo, on_delete=models.CASCADE, related_name="company"
@@ -126,8 +128,6 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
-
-
 
 # Job Model
 class Job(models.Model):
@@ -145,10 +145,12 @@ class Job(models.Model):
         ("LEAD", "Lead"),
     ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
+                          unique=True)
     title = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=JOB_TYPES)
-    level = models.CharField(max_length=20, choices=JOB_LEVELS, blank=True, null=True)
+    level = models.CharField(max_length=20, choices=JOB_LEVELS, blank=True,
+                             null=True)
     salary = models.OneToOneField(Salary, on_delete=models.CASCADE)
     description = models.TextField()
 
@@ -157,7 +159,8 @@ class Job(models.Model):
     benefits = models.JSONField(default=list)
     tags = models.JSONField(default=list)
 
-    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="jobs")
+    company = models.ForeignKey(Company, on_delete=models.CASCADE,
+                                related_name="jobs")
     posted_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     is_expired = models.BooleanField(default=False)
@@ -166,3 +169,77 @@ class Job(models.Model):
 
     def __str__(self):
         return self.title
+
+
+# JobApplication Model
+class JobApplication(models.Model):
+    STATUS_CHOICES = [
+        ("APPLIED", "Applied"),
+        ("UNDER_REVIEW", "Under Review"),
+        ("INTERVIEW_SCHEDULED", "Interview Scheduled"),
+        ("OFFERED", "Offered"),
+        ("REJECTED", "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4,
+                          editable=False, unique=True)
+    job = models.ForeignKey(Job, on_delete=models.CASCADE,
+                            related_name="applications")
+    applicant = models.ForeignKey(UserProfile, on_delete=models.CASCADE,
+                                  related_name="applications")
+    resume = models.ForeignKey(Resume, on_delete=models.SET_NULL, null=True,
+                               blank=True)
+    cover_letter = models.TextField(blank=True, null=True)
+    applied_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES,
+                              default="APPLIED")
+
+    def __str__(self):
+        return f"{self.applicant.user.username} - {self.job.title}"
+    
+#Notification Model
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Notification for {self.user.username} - {'Read' if self.is_read else 'Unread'}"
+    
+#SavedJob Model
+class SavedJob(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_jobs')
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='saved_by_users')
+    saved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'job')
+
+    def __str__(self):
+        return f"{self.user.username} saved {self.job.title}"
+    
+
+
+
+#Conversation and Message Models for chat functionality
+class Conversation(models.Model):
+    participants = models.ManyToManyField(User, related_name='conversations')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Conversation {self.id} - Participants: {self.participants.count()}"
+    
+class Message(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    content = models.TextField()
+    is_read = models.BooleanField(default=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Message {self.id} in Conversation {self.conversation.id}"
+
+
+
+    

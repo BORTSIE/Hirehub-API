@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import UserProfile, Resume, SocialLink, Salary, Company, Job
+from .models import UserProfile, Resume, SocialLink, Salary, Company, Job, FoundingInfo, ContactInfo, JobApplication, SavedJob, Notification, Message, Conversation
 from django.contrib.auth.models import User
 
 
@@ -97,11 +97,27 @@ class SalarySerializer(serializers.ModelSerializer):
         model = Salary
         fields = '__all__'
 
+# FoundingInfo Serializer
+class FoundingInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FoundingInfo
+        fields = '__all__'
+
+# ContactInfo Serializer
+class ContactInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactInfo
+        fields = '__all__'
+
+
 # Company Serializer
 class CompanySerializer(serializers.ModelSerializer):
+    founding_info = FoundingInfoSerializer(read_only=True)
+    socials = SocialLinkSerializer(read_only=True)
+    contact_info = ContactInfoSerializer(read_only=True)           
     class Meta:
         model = Company
-        fields = ['id', 'name', 'logo', 'banner_logo', 'about_us']
+        fields = '__all__'
 
 
 # Job Serializer
@@ -139,3 +155,53 @@ def update(self, instance, validated_data):
         setattr(instance, attr, value)
     instance.save()
     return instance
+
+
+#JobApplication Serializer
+class JobApplicationSerializer(serializers.ModelSerializer):
+    job = JobSerializer(read_only=True)
+    user_profile = UserProfileSerializer(read_only=True)
+    
+    class Meta:
+        model = JobApplication
+        fields = '__all__'
+
+#SavedJob Serializer
+class SavedJobSerializer(serializers.ModelSerializer):
+    job = JobSerializer(read_only=True)
+    user_profile = UserProfileSerializer(read_only=True)
+    
+    class Meta:
+        model = SavedJob
+        fields = '__all__'
+
+#Notification Serializer
+class NotificationSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = Notification
+        fields = '__all__'
+
+#Conversation Serializer
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "first_name"]
+
+#Message Serializer
+class MessageSerializer(serializers.ModelSerializer):
+    sender = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Message
+        fields = ["id", "conversation", "sender", "content", "is_read", "timestamp"]
+
+#Conversation Serializer
+class ConversationSerializer(serializers.ModelSerializer):
+    participants = UserSerializer(many=True, read_only=True)
+    messages = MessageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Conversation
+        fields = ["id", "participants", "created_at", "messages"]
