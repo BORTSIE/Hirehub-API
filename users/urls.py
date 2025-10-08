@@ -15,11 +15,11 @@ urlpatterns = [
     path("get_authentication/", views.get_authentication),
  
     # Profile
-     path("profile/", views.get_user),
+    path("profile/", views.get_user),
     path("profile_save/", views.save_user_profile, name="save_user_profile"),
 
     #Resume
-    path("resume_save/", views.save_resume, name="save_resume"),
+    path("resume_save/", views.save_resume,),
 
     # Social Links
     path("social_links/", views.get_socail_links, name="get_social_links"),
@@ -27,6 +27,9 @@ urlpatterns = [
 
     # Jobs
     path("jobs/list/", views.list_jobs),
+    path("jobs/all/", views.retrieve_all_jobs),
+    path("jobs/applied/", views.jobs_applied),
+    path("jobs/company/<uuid:company_id>/", views.retrieve_company_jobs),
     path("jobs/create/", views.create_job),#  EM only
     path("jobs/retrieve/<uuid:pk>/", views.retrieve_job),
     path("jobs/<uuid:pk>/update/", views.update_job),
@@ -36,6 +39,7 @@ urlpatterns = [
     path("companies/", views.list_companies),
     path("create_company/", views.create_company), #EM only
     path("get_company/<uuid:id>/", views.get_company),
+    path("company/", views.my_company),
 
     # Applications
     path("apply_job/<uuid:job_id>/", views.apply_to_job), #JS only

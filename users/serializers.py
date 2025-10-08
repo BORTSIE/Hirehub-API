@@ -46,7 +46,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     user  = UserSerializer(read_only=True)
     class Meta:
         model = UserProfile
-        fields = "__all__"
+        exclude = ['company']
 
 
 # Resume Serializer
@@ -112,9 +112,9 @@ class ContactInfoSerializer(serializers.ModelSerializer):
 
 # Company Serializer
 class CompanySerializer(serializers.ModelSerializer):
-    founding_info = FoundingInfoSerializer(read_only=True)
-    socials = SocialLinkSerializer(read_only=True)
-    contact_info = ContactInfoSerializer(read_only=True)           
+    founding_info = FoundingInfoSerializer(read_only=True, default=None)
+    socials = SocialLinkSerializer(read_only=True, default=None)
+    contact_info = ContactInfoSerializer(read_only=True, default=None)           
     class Meta:
         model = Company
         fields = '__all__'
@@ -123,45 +123,47 @@ class CompanySerializer(serializers.ModelSerializer):
 # Job Serializer
 class JobSerializer(serializers.ModelSerializer):
     salary = SalarySerializer()
-    company = CompanySerializer()
+    company = CompanySerializer(read_only=True) 
+    applicant_count = serializers.IntegerField(read_only=True)
     
     class Meta:
-            model = Job
-            fields = '__all__'
+        model = Job
+        fields = '__all__'
 
-def create(self, validated_data):
-    salary_data = validated_data.pop('salary')
-    company_data = validated_data.pop('company')
-    salary = Salary.objects.create(**salary_data)
-    company = Company.objects.get(id=company_data[id])
-    job = Job.objects.create(salary=salary, company=company, **validated_data)
-    return job
+    def create(self, validated_data):
+        # Extract salary data
+        salary_data = validated_data.pop('salary', None)
+        if salary_data:
+            salary = Salary.objects.create(**salary_data)
+            validated_data['salary'] = salary
+        
+        # Assign company from context if available
+        company = self.context.get('company')
+        if company:
+            validated_data['company'] = company
+        
+        job = Job.objects.create(**validated_data)
+        return job
 
-def update(self, instance, validated_data):
-    salary_data = validated_data.pop('salary', None)
-    company_data = validated_data.pop('company', None)
+    def update(self, instance, validated_data):
+        salary_data = validated_data.pop('salary', None)
+        if salary_data:
+            SalarySerializer(instance.salary, data=salary_data).is_valid(raise_exception=True)
+            instance.salary.min = salary_data.get('min', instance.salary.min)
+            instance.salary.max = salary_data.get('max', instance.salary.max)
+            instance.salary.save()
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
-    if salary_data:
-        salary_serializer = SalarySerializer(instance.salary, data=salary_data)
-        if salary_serializer.is_valid(raise_exception=True):
-            salary_serializer.save()
-
-    if company_data:
-        company_serializer = CompanySerializer(instance.company, data=company_data)
-        if company_serializer.is_valid(raise_exception=True):
-            company_serializer.save()
-
-    for attr, value in validated_data.items():
-        setattr(instance, attr, value)
-    instance.save()
-    return instance
 
 
 #JobApplication Serializer
 class JobApplicationSerializer(serializers.ModelSerializer):
     job = JobSerializer(read_only=True)
-    user_profile = UserProfileSerializer(read_only=True)
-    
+    applicant = UserProfileSerializer(read_only=True)
     class Meta:
         model = JobApplication
         fields = '__all__'

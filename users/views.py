@@ -120,7 +120,7 @@ def login(request):
         if not user.is_active:
             return Response(
                 {"message": "Account is not activated. Please check your email."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_400_BAD_REQUEST
             )
         
         if not check_password(password, user.password):
@@ -258,7 +258,7 @@ def logout(request):
     try:
         auth.logout(request)
 
-        res = Response("You logged out successfully", { "authenticated": False })
+        res = Response({"message":"You logged out successfully", "authenticated": False }, status=status.HTTP_200_OK)
 
         cookie_settings = { "path": "/", "samesite": "None" }
 
@@ -278,20 +278,19 @@ def logout(request):
         return res
 
     except Exception as e:
-        return Response("An unexpected error occured", { "message": f"Failed to logout user {e}", }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({ "message": f"Failed to logout user {e}" }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Get authentication status
-@csrf_exempt
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_authentication(request):
     try:
-
-        return Response("authenticated", { "auth": True, })
+        return Response({ "auth": True}, status=status.HTTP_200_OK)
 
     except Exception as e:
-        return Response("An unexpected error occured", { "message": "Failed to get authentication status", }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)     
+        return Response({"message": "Failed to get authentication status"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)     
 
 
            
@@ -299,9 +298,9 @@ def get_authentication(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_socail_links(request):
-    socail_links =request.user.userprofile.social_links
+    socail_links =request.user.userprofile
     serializer = SocialLinkSerializer(socail_links)
-    return Response(serializer.data)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 # Save user profile
@@ -338,21 +337,48 @@ def save_user_profile(request):
 @permission_classes([IsAuthenticated])
 def save_resume(request):
     user = request.user
+    resume_name = request.data.get("resume_name")
+    biography = request.data.get("biography")
+    resume_file = request.FILES.get("resume_file")
+
     try:
-        try:
-            profile = UserProfile.objects.get(user=user)
-        except UserProfile.DoesNotExist:
-            return Response({"status": "error", "message": "UserProfile does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        
-        resume= Resume.objects.create(user_profile=profile)    
-        resume.resume_name = request.data.get("resume_name", resume.resume_name)
-        resume.biography = request.data.get("biography", resume.biography)    
-        if "resume_file" in request.FILES:
-            resume.resume_file = request.FILES["resume_file"]    
-        resume.save()
-        return Response({"status": "success", "message": "Resume saved"}, status=status.HTTP_200_OK)
+        profile = UserProfile.objects.get(user=user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {"status": "error", "message": "UserProfile does not exist"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if not resume_file:
+        return Response(
+            {"status": "error", "message": "No resume file provided"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not resume_file.name.endswith(".pdf"):
+        return Response(
+            {"status": "error", "message": "Only PDF files are allowed."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        Resume.objects.create(
+            user_profile=profile,
+            resume_name=resume_name or resume_file.name,
+            biography=biography or "",
+            resume_file=resume_file
+        )
+
+        return Response(
+            {"status": "success", "message": "Resume saved successfully"},
+            status=status.HTTP_201_CREATED
+        )
+
     except Exception as e:
-        return Response({"status": "error", "message": f"Failed to save resume: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"status": "error", "message": f"Failed to save resume: {e}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # Save social links
@@ -521,22 +547,22 @@ def create_job(request):
     profile = user.userprofile
 
     if profile.user_type != 'EM':
-        return Response({"message": "Only employers can post jobs."},
-                        status=status.HTTP_403_FORBIDDEN)
+        return Response({"message": "Only employers can post jobs."}, status=status.HTTP_403_FORBIDDEN)
 
-    # Ensure employer has a company
     try:
-        company = Company.objects.get(contact_info__email=user.email)
+        company = profile.company
+        if not company:
+            return Response({"message": "You must create a company profile first."}, status=status.HTTP_400_BAD_REQUEST)
     except Company.DoesNotExist:
-        return Response({"message": "You must create a company profile before posting jobs."},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "You must create a company profile first."}, status=status.HTTP_400_BAD_REQUEST)
 
-    serializer = JobSerializer(data=request.data)
+    serializer = JobSerializer(data=request.data, context={'company': company})
     if serializer.is_valid():
-        job = serializer.save(company=company)
+        job = serializer.save()
         return Response(JobSerializer(job).data, status=status.HTTP_201_CREATED)
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 #List all jobs
 @api_view(['GET'])
@@ -590,9 +616,54 @@ def list_jobs(request):
     return Response(serializer.data)
 
 
-#Retrieve a specific job
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def retrieve_company_jobs(request, company_id):
+    """
+    Get all non-deleted jobs for a specific company (only accessible by company owner)
+    """
+    try:
+        company = Company.objects.get(id=company_id)
+    except Company.DoesNotExist:
+        return Response({"message": "Company not found"}, status=404)
+
+    # Optional: ensure only the company's own account can view this data
+    if company.contact_info.email != request.user.email:
+        return Response({"message": "Unauthorized access"}, status=403)
+
+    # Fetch jobs with applicant counts
+    jobs = (
+        Job.objects.filter(company=company, is_deleted=False)
+        .annotate(applicant_count=Count('applications'))
+        .order_by('-posted_at')
+    )
+
+    # Serialize jobs normally
+    serializer = JobSerializer(jobs, many=True)
+
+    # Add applicant counts only for internal/company viewing
+    data_with_counts = []
+    for job, serialized_job in zip(jobs, serializer.data):
+        serialized_job["applicant_count"] = job.applicant_count
+        data_with_counts.append(serialized_job)
+
+    return Response(data_with_counts)
+
+
+@api_view(['GET'])
+@permission_classes([])
+def retrieve_all_jobs(request):
+    """
+    Get all non-deleted jobs 
+    """
+    jobs = Job.objects.all().filter(is_deleted=False).order_by("-posted_at")
+    serializer = JobSerializer(jobs, many=True)
+    return Response(serializer.data)
+
+
+#Retrieve a specific job
+@api_view(['GET'])
+@permission_classes([])
 def retrieve_job(request, pk):
     try:
         job = Job.objects.get(pk=pk, is_deleted=False) 
@@ -601,6 +672,7 @@ def retrieve_job(request, pk):
     
     serializer = JobSerializer(job)
     return Response(serializer.data)
+
 
 #Update a specific job
 @api_view(['PUT'])
@@ -617,6 +689,7 @@ def update_job(request, pk):
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 #Soft delete a specific job
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
@@ -630,6 +703,7 @@ def delete_job(request, pk):
     job.deleted_at = timezone.now()
     job.save()
     return Response({"message": "Job deleted successfully"}, status=status.HTTP_200_OK)
+
 
 @api_view(['POST'])
 def resend_activation_email(request, email):
@@ -661,16 +735,14 @@ def create_company(request):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        data = request.data  # single JSON object
+        data = request.data 
 
-        # ✅ Check if company already exists (by name)
         if Company.objects.filter(name__iexact=data.get("name")).exists():
             return Response(
                 {"message": "A company with this name already exists."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Or check if this recruiter already created a company
         if Company.objects.filter(contact_info__email=data.get("email")).exists():
             return Response(
                 {"message": "A company with this email already exists."},
@@ -707,11 +779,22 @@ def create_company(request):
             name=data.get("name"),
             logo=data.get("logo"),
             banner_logo=data.get("banner_logo"),
-            about_us=data.get("about_us"),
+            about_us=data.get("about"),
             founding_info=founding_info,
             contact_info=contact_info,
             socials=social_links
         )
+
+        try:
+            userprofile = UserProfile.objects.get(user=user)
+        except UserProfile.DoesNotExist:
+            return Response({"message": "user does not have a profile"}, status=status.HTTP_404_NOT_FOUND)
+
+        company.onboarded = True
+        company.save()
+
+        userprofile.company = company
+        userprofile.save()
 
         return Response(
             {
@@ -742,6 +825,37 @@ def get_company(request, id):
     except Exception as e:
         return Response({"message": f"Failed to retrieve company profile: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_company(request):
+    try:
+        user_profile = request.user.userprofile
+
+        if user_profile.user_type not in ["EM", "AD"]:
+            return Response(
+                {"message": "Only employers or admins can access company profile."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # if not user_profile.company:
+        #     return Response(
+        #         {"message": "No company linked to this profile."},
+        #         status=status.HTTP_404_NOT_FOUND
+        #     )
+
+        serializer = CompanySerializer(user_profile.company)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {"message": f"Failed to retrieve company profile: {e}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+
 # List all companies
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -809,6 +923,25 @@ def list_applications(request, job_id):
     serializer = JobApplicationSerializer(applications, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def jobs_applied(request):
+    """
+    Get all jobs that the authenticated user has applied for.
+    Only works for job seekers (user_type = "JS").
+    """
+    user_profile = request.user.userprofile
+
+    if user_profile.user_type != "JS":
+        return Response({"message": "Only job seekers can view their applied jobs."}, status=status.HTTP_403_FORBIDDEN)
+
+    applications = JobApplication.objects.filter(applicant=user_profile)
+    serializer = JobApplicationSerializer(applications, many=True)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 #update application status (recruiter only)
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
@@ -869,6 +1002,7 @@ def list_saved_jobs(request):
     saved_jobs = SavedJob.objects.filter(user_profile=user_profile)
     serializer = SavedJobSerializer(saved_jobs, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 #delete a saved job
 @api_view(["DELETE"])
